@@ -1,21 +1,25 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-import urllib, urllib2
-import os, json
-import triprequest
+import os
+from .triprequest import TripRequest
+import urllib.request
+import urllib.parse
 
 
-class EFA(triprequest.TripRequest):
-    debug = False
+class EFA(TripRequest):
 
-    def __init__(self, **args):
-        pass
+    def __init__(self):
+        super().__init__()
+        self.debug = False
 
-    def submit(self, url, post, outputtype):
-        post.update({'outputFormat': outputtype, 'coordOutputFormat': 'WGS84'})
-        if self.debug and os.path.isfile('cache.%s' % outputtype): return open('cache.%s' % outputtype, 'r').read()
-        response = urllib2.urlopen(url, urllib.urlencode(post)).read()
-        if self.debug: open('cache.%s' % outputtype, 'w').write(response)
+    def submit(self, url: str, post_data: dict, outputtype: str):
+        post_data.update({'outputFormat': outputtype, 'coordOutputFormat': 'WGS84'})
+        if self.debug and os.path.isfile(f'cache.{outputtype}'):
+            return open(f'cache.{outputtype}', 'r').read()
+
+        post_data["name_destination"] = urllib.parse.quote(post_data["name_destination"])
+        data = urllib.parse.urlencode(post_data).encode('utf-8')
+        req = urllib.request.Request(url, data=data)
+        response = urllib.request.urlopen(req).read().decode('utf-8')
+
+        if self.debug:
+            open(f'cache.{outputtype}', 'w').write(response)
         return response
-
-# EFA().submit()

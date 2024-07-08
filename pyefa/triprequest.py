@@ -1,71 +1,84 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-import datetime, urllib, urllib2, re
-import json, time
+import datetime
+import json
+import re
+
 from bs4 import BeautifulSoup
-import classes, tools, exceptions
+
+from .classes import TripPointCompatible, EmptyTripPoint, TripPointCompatibleUnclear, Station, Address, Point, Mot, \
+    TripResult
+from .exceptions import SetupException, NotImplementedException
+from .tools import coords
 
 
-class TripRequest():
+class TripRequest:
     mots = ['zug', 's-bahn', 'u-bahn', 'stadtbahn', 'tram', 'stadtbus', 'regionalbus', 'schnellbus', 'seilbahn',
             'schiff', 'ast', 'sonstige']
 
-    def tripRequest(self, origin, destination, via=None, time=None, timetype='dep', exclude=[], max_interchanges=9,
+    def __init__(self):
+        self.efa_triprequest_url = None  # Overridden by efa
+
+    def submit(self, url: str, post_data: dict, outputtype: str):
+        """Is overridden by efa"""
+        pass
+
+    def tripRequest(self, origin, destination, via=None, time=None, timetype='dep', exclude=None, max_interchanges=9,
                     select_interchange_by='speed', use_near_stops=False, train_type='local', walk_speed='normal',
                     with_bike=False, use_realtime=True, apitype='both'):
+        if exclude is None:
+            exclude = []
         now = datetime.datetime.now()
 
         # Parametervalidierung
-        if not isinstance(origin, classes.TripPointCompatible):
-            origin = classes.TripPointCompatible.fromanything(origin)
+        if not isinstance(origin, TripPointCompatible):
+            origin = TripPointCompatible.fromanything(origin)
             if origin is None:
-                raise exceptions.SetupException('origin', origin, 'Valid Station Description')
+                raise SetupException('origin', origin, 'Valid Station Description')
 
-        if not isinstance(destination, classes.TripPointCompatible):
-            destination = classes.TripPointCompatible.fromanything(destination)
+        if not isinstance(destination, TripPointCompatible):
+            destination = TripPointCompatible.fromanything(destination)
             if destination is None:
-                raise exceptions.SetupException('destination', destination, 'Valid Station Description')
+                raise SetupException('destination', destination, 'Valid Station Description')
 
         if via is None:
-            via = classes.EmptyTripPoint()
-        elif not isinstance(via, classes.TripPointCompatible):
-            via = classes.TripPointCompatible.fromanything(via)
+            via = EmptyTripPoint()
+        elif not isinstance(via, TripPointCompatible):
+            via = TripPointCompatible.fromanything(via)
             if via is None:
-                raise exceptions.SetupException('via', via, 'Valid Station Description')
+                raise SetupException('via', via, 'Valid Station Description')
 
         if time is not None and not isinstance(time, datetime.datetime):
-            raise exceptions.SetupException('time', time, 'datetime.datetime')
+            raise SetupException('time', time, 'datetime.datetime')
 
         if timetype not in ['dep', 'arr']:
-            raise exceptions.SetupException('timetype', timetype, '(dep|arr)')
+            raise SetupException('timetype', timetype, '(dep|arr)')
 
         if not isinstance(exclude, list) or len(set(exclude) - set(self.mots)):
-            raise exceptions.SetupException('exclude', exclude,
-                                            'list with (zug|s-bahn|u-bahn|stadtbahn|tram|stadtbus|regionalbus|schnellbus|seilbahn|schiff|ast|sonstige)')
+            raise SetupException('exclude', exclude,
+                                 'list with (zug|s-bahn|u-bahn|stadtbahn|tram|stadtbus|regionalbus|schnellbus|seilbahn|schiff|ast|sonstige)')
 
         if not isinstance(max_interchanges, int) or max_interchanges < 0:
-            raise exceptions.SetupException('max_interchanges', max_interchanges, 'int>=0')
+            raise SetupException('max_interchanges', max_interchanges, 'int>=0')
 
         if select_interchange_by not in ['speed', 'waittime', 'distance']:
-            raise exceptions.SetupException('select_interchange_by', select_interchange_by, '(speed|waittime|distance)')
+            raise SetupException('select_interchange_by', select_interchange_by, '(speed|waittime|distance)')
 
         if not isinstance(use_near_stops, bool):
-            raise exceptions.SetupException('use_near_stops', use_near_stops, 'bool')
+            raise SetupException('use_near_stops', use_near_stops, 'bool')
 
         if train_type not in ['local', 'ic', 'ice']:
-            raise exceptions.SetupException('train_type', train_type, '(local|ic|ice)')
+            raise SetupException('train_type', train_type, '(local|ic|ice)')
 
         if walk_speed not in ['normal', 'fast', 'slow']:
-            raise exceptions.SetupException('walk_speed', walk_speed, '(normal|fast|slow)')
+            raise SetupException('walk_speed', walk_speed, '(normal|fast|slow)')
 
         if not isinstance(with_bike, bool):
-            raise exceptions.SetupException('with_bike', with_bike, 'bool')
+            raise SetupException('with_bike', with_bike, 'bool')
 
         if not isinstance(use_realtime, bool):
-            raise exceptions.SetupException('use_realtime', use_realtime, 'bool')
+            raise SetupException('use_realtime', use_realtime, 'bool')
 
         if apitype not in ['json', 'xml', 'both']:
-            raise exceptions.SetupException('apitype', apitype, '(json|xml|both)')
+            raise SetupException('apitype', apitype, '(json|xml|both)')
 
         # Post-Request bauen
         post = {
@@ -96,13 +109,19 @@ class TripRequest():
             'lineRestriction': {'local': 403, 'ic': 401, 'ice': 400}[train_type],
             'locationServerActive': 1,
             'maxChanges': max_interchanges,
-            'name_destination': destination.name.decode('utf-8').encode('iso-8859-1'),
-            'name_origin': origin.name.decode('utf-8').encode('iso-8859-1'),
-            'name_via': via.name.decode('utf-8').encode('iso-8859-1'),
+            # 'name_destination': destination.name.encode('iso-8859-1'),
+            # 'name_origin': origin.name.encode('iso-8859-1'),
+            # 'name_via': via.name.encode('iso-8859-1'),
+            'name_destination': destination.name.encode('utf-8'),
+            'name_origin': origin.name.encode('utf-8'),
+            'name_via': via.name.encode('utf-8'),
             'nextDepsPerLeg': 1,
-            'place_destination': destination.place.decode('utf-8').encode('iso-8859-1'),
-            'place_origin': origin.place.decode('utf-8').encode('iso-8859-1'),
-            'place_via': via.place.decode('utf-8').encode('iso-8859-1'),
+            # 'place_destination': destination.place.encode('iso-8859-1'),
+            # 'place_origin': origin.place.encode('iso-8859-1'),
+            # 'place_via': via.place.encode('iso-8859-1'),
+            'place_destination': destination.place.encode('utf-8'),
+            'place_origin': origin.place.encode('utf-8'),
+            'place_via': via.place.encode('utf-8'),
             'ptOptionsActive': 1,
             'requestID': 0,
             'routeType': {'speed': 'LEASTTIME', 'waittime': 'LEASTINTERCHANGE', 'distance': 'LEASTWALKING'}[
@@ -114,15 +133,19 @@ class TripRequest():
             'type_via': via.ptype
         }
 
-        if use_realtime: post['useRealtime'] = 1
-        if use_near_stops: post['useProxFootSearch'] = 1
-        if with_bike: post['bikeTakeAlong'] = 1
-        for item in exclude: post.pop('inclMOT_%d' % self.mots.index(item))
+        if use_realtime:
+            post['useRealtime'] = 1
+        if use_near_stops:
+            post['useProxFootSearch'] = 1
+        if with_bike:
+            post['bikeTakeAlong'] = 1
+        for item in exclude:
+            post.pop('inclMOT_%d' % self.mots.index(item))
 
         settings = locals()
         settings.pop('self')
 
-        result = classes.TripResult(settings)
+        result = TripResult(settings)
         result.time = (now if time is None else time)
 
         if apitype in ['xml', 'both']:
@@ -151,14 +174,15 @@ class TripRequest():
         for odv in odvs:
             if odv['usage'] in ['origin', 'destination', 'via']:
                 myodv = self.parseOdvXML(odv)
-                if isinstance(myodv, classes.TripPointCompatibleUnclear): result.unclear = True
+                if isinstance(myodv, TripPointCompatibleUnclear):
+                    result.unclear = True
                 setattr(result, odv['usage'], myodv)
 
         # Routen parsen
         if soup.itdRequest.itdTripRequest.itdItinerary.itdRouteList is not None:
-            routesXML = soup.itdRequest.itdTripRequest.itdItinerary.itdRouteList('itdRoute')
+            routes_xml = soup.itdRequest.itdTripRequest.itdItinerary.itdRouteList('itdRoute')
             i = 0
-            for routeXML in routesXML:
+            for routeXML in routes_xml:
                 newroute = result.addroute(i)
                 newroute.duration = self.parseHourMinutes(routeXML['publicDuration'])
                 newroute.vehicletime = routeXML['vehicleTime']
@@ -168,17 +192,17 @@ class TripRequest():
 
                 if routeXML.itdInfoTextList is not None:
                     for infotext in routeXML.itdInfoTextList('infoTextListElem'):
-                        newroute.infotext.append(infotext.getText().encode('utf-8').strip())
+                        newroute.infotext.append(infotext.getText().strip())
 
-                partsXML = routeXML.itdPartialRouteList('itdPartialRoute')
+                parts_xml = routeXML.itdPartialRouteList('itdPartialRoute')
                 j = 0
-                for partXML in partsXML:
+                for partXML in parts_xml:
                     newpart = newroute.addpart(j)
-                    newpart.origin = classes.Point()
+                    newpart.origin = Point()
                     newpart.origin = self.parsePointXML(partXML('itdPoint')[0], newpart.origin)
-                    newpart.destination = classes.Point()
+                    newpart.destination = Point()
                     newpart.destination = self.parsePointXML(partXML('itdPoint')[1], newpart.destination)
-                    newpart.mot = self.parseMotXML(partXML.itdMeansOfTransport, classes.Mot())
+                    newpart.mot = self.parseMotXML(partXML.itdMeansOfTransport, Mot())
 
                     if newpart.mot.walk:
                         newpart.origin.departure_live = None
@@ -187,53 +211,60 @@ class TripRequest():
                         newpart.destination.arrival_delay = None
 
                     newpart.duration = int(partXML['timeMinute'])
-                    if partXML.has_attr('distance'): newpart.distance = int(partXML['distance'])
+                    if partXML.has_attr('distance'):
+                        newpart.distance = int(partXML['distance'])
                     j += 1
                 i += 1
         return result
 
     def parseOdvXML(self, xmldata):
         if xmldata.itdOdvPlace['state'] == 'empty':
-            return classes.EmptyTripPoint()
+            return EmptyTripPoint()
 
-        if 'list' in [xmldata.itdOdvPlace['state'].encode('utf-8'), xmldata.itdOdvName['state'].encode('utf-8')]:
-            result = classes.TripPointCompatibleUnclear()
-            result.place = [elem.getText().encode('utf-8').strip() for elem in xmldata.itdOdvPlace('odvPlaceElem')]
-            result.name = [elem.getText().encode('utf-8').strip() for elem in xmldata.itdOdvName('odvNameElem')]
+        if 'list' in [xmldata.itdOdvPlace['state'], xmldata.itdOdvName['state']]:
+            result = TripPointCompatibleUnclear()
+            result.place = [elem.getText().strip() for elem in xmldata.itdOdvPlace('odvPlaceElem')]
+            result.name = [elem.getText().strip() for elem in xmldata.itdOdvName('odvNameElem')]
         else:
             odvtype = xmldata['type']
             if odvtype == 'any': odvtype = xmldata.itdOdvName.odvNameElem['anyType']
             if odvtype == 'stop':
-                result = classes.Station()
-                result.place = xmldata.itdOdvPlace.odvPlaceElem.getText().encode('utf-8').strip()
-                result.name = xmldata.itdOdvName.odvNameElem.getText().encode('utf-8').strip()
-                result.stopid = xmldata.itdOdvName.odvNameElem['stopID'] if xmldata.itdOdvName.odvNameElem.has_attr(
-                    'stopID') else xmldata.itdOdvName.odvNameElem['id']
-                if xmldata.itdOdvName.odvNameElem.has_attr('x'): result.coords = tools.coords(
-                    xmldata.itdOdvName.odvNameElem['x'], xmldata.itdOdvName.odvNameElem['y'])
+                result = Station()
+                result.place = xmldata.itdOdvPlace.odvPlaceElem.getText().strip()
+                result.name = xmldata.itdOdvName.odvNameElem.getText().strip()
+                if xmldata.itdOdvName.odvNameElem.has_attr('stopID'):
+                    result.stopid = xmldata.itdOdvName.odvNameElem['stopID']
+                else:
+                    result.stopid = xmldata.itdOdvName.odvNameElem['id']
+
+                if xmldata.itdOdvName.odvNameElem.has_attr('x'):
+                    result.coords = coords(xmldata.itdOdvName.odvNameElem['x'], xmldata.itdOdvName.odvNameElem['y'])
             elif odvtype == 'address':
-                result = classes.Address()
-                result.place = xmldata.itdOdvPlace.odvPlaceElem.getText().encode('utf-8').strip()
-                result.name = xmldata.itdOdvName.odvNameElem.getText().encode('utf-8').strip()
+                result = Address()
+                result.place = xmldata.itdOdvPlace.odvPlaceElem.getText().strip()
+                result.name = xmldata.itdOdvName.odvNameElem.getText().strip()
                 result.streetname = xmldata.itdOdvName.odvNameElem['streetName']
                 result.housenumber = xmldata.itdOdvName.odvNameElem['houseNumber']
-                if xmldata.itdOdvName.odvNameElem.has_attr('x'): result.coords = tools.coords(
+                if xmldata.itdOdvName.odvNameElem.has_attr('x'): result.coords = coords(
                     xmldata.itdOdvName.odvNameElem['x'], xmldata.itdOdvName.odvNameElem['y'])
             else:
-                raise exceptions.NotImplementedException('unknown type of odv: "%s"' % xmldata['type'])
+                raise NotImplementedException('unknown type of odv: "%s"' % xmldata['type'])
         return result
 
     def parsePointXML(self, xmldata, result):
-        result.place = xmldata['locality'].encode('utf-8').strip()
-        result.name = xmldata['nameWO'].encode('utf-8').strip() if xmldata['locality'] != '' or xmldata[
-            'nameWO'] != '' else xmldata['name'].encode('utf-8').strip()
+        result.place = xmldata['locality'].strip()
+        result.name = xmldata['nameWO'].strip() if xmldata['locality'] != '' or xmldata[
+            'nameWO'] != '' else xmldata['name'].strip()
         result.stopid = xmldata['stopID']
-        result.platformname = xmldata['platformName'].encode('utf-8').replace('Gleis', '').replace('Bstg.', '').strip()
-        if xmldata('x'): result.coords = tools.coords(xmldata['x'], xmldata['y'])
+        result.platformname = xmldata['platformName'].replace('Gleis', '').replace('Bstg.', '').strip()
+        if xmldata('x'):
+            result.coords = coords(xmldata['x'], xmldata['y'])
 
         times = []
-        if xmldata('itdDateTimeTarget'): times.append(self.parseDateTimeXML(xmldata.itdDateTimeTarget))
-        if xmldata('itdDateTime'): times.append(self.parseDateTimeXML(xmldata.itdDateTime))
+        if xmldata('itdDateTimeTarget'):
+            times.append(self.parseDateTimeXML(xmldata.itdDateTimeTarget))
+        if xmldata('itdDateTime'):
+            times.append(self.parseDateTimeXML(xmldata.itdDateTime))
         if len(times) > 0:
             setattr(result, '%s' % xmldata['usage'], times[0])
         if len(times) == 2:
@@ -251,22 +282,20 @@ class TripRequest():
         result.mottype = int(xmldata['motType'])
 
         if result.mottype == 0 and xmldata.has_attr('trainName'):
-            result.name = xmldata['trainName'].encode('utf-8').strip()
-            result.abbr = xmldata['trainType'].encode('utf-8').strip()
-            result.number = (xmldata['symbol'] if xmldata.has_attr('symbol') else xmldata['shortname']).encode(
-                'utf-8').strip()
+            result.name = xmldata['trainName'].strip()
+            result.abbr = xmldata['trainType'].strip()
+            result.number = (xmldata['symbol'] if xmldata.has_attr('symbol') else xmldata['shortname']).strip()
             result.line = result.abbr + result.number
         else:
-            result.name = xmldata['productName'].encode('utf-8').strip()
-            result.abbr = re.sub('[0-9 -]', '', xmldata['shortname'].encode('utf-8')).strip()
-            result.number = re.sub('[^0-9]', '', xmldata['shortname'].encode('utf-8')).strip()
-            result.line = (xmldata['symbol'] if xmldata.has_attr('symbol') else xmldata['shortname']).encode(
-                'utf-8').strip()
+            result.name = xmldata['productName'].strip()
+            result.abbr = re.sub('[0-9 -]', '', xmldata['shortname']).strip()
+            result.number = re.sub('[^0-9]', '', xmldata['shortname']).strip()
+            result.line = (xmldata['symbol'] if xmldata.has_attr('symbol') else xmldata['shortname']).strip()
 
         # print xmldata
-        result.destination = classes.Station()
+        result.destination = Station()
         result.destination.stopid = xmldata['destID']
-        result.destination.name = xmldata['destination'].encode('utf-8').strip()
+        result.destination.name = xmldata['destination'].strip()
         return result
 
     def parseDateTimeXML(self, xmldata):
@@ -309,37 +338,37 @@ class TripRequest():
             j = 0
             for partJSON in partsJSON:
                 newpart = newroute.addpart(j)
-                if newpart.origin is None: newpart.origin = classes.Point()
-                if newpart.destination is None: newpart.destination = classes.Point()
+                if newpart.origin is None: newpart.origin = Point()
+                if newpart.destination is None: newpart.destination = Point()
                 newpart.origin = self.parsePointJSON(partJSON['points'][0], newpart.origin)
                 newpart.destination = self.parsePointJSON(partJSON['points'][1], newpart.destination)
-                newpart.mot = self.parseMotJSON(partJSON['mode'], classes.Mot())
+                newpart.mot = self.parseMotJSON(partJSON['mode'], Mot())
 
                 newpart.via = []
                 newpart.via_all = []
 
-                if 'path' in partJSON: newpart.path = [tools.coords(*c.split(',')) for c in
+                if 'path' in partJSON: newpart.path = [coords(*c.split(',')) for c in
                                                        partJSON['path'].strip().split(' ')]
 
                 stopsJSON = partJSON['stopSeq'] if 'stopSeq' in partJSON else []
 
                 k = 0
                 for stopJSON in stopsJSON:
-                    newstop = self.parseStopJSON(stopJSON, classes.Point())
+                    newstop = self.parseStopJSON(stopJSON, Point())
                     newpart.via.append(newstop)
                     newstop.k = k
                     k += 1
 
                 # So, und jetzt müssen wir dinge kompliziert machen, um bugs der EFA zu Workarounden
                 # Zunächst mal original origin und destination durch die detaillierteren versionen aus der Stopliste ersetzen
-                for k in xrange(len(newpart.via)):
+                for k in range(len(newpart.via)):
                     via = newpart.via[k]
                     if via.stopid == newpart.origin.stopid and via.get_maybelive_time(
                             'departure') == newpart.origin.departure and via.coords == newpart.origin.coords:
                         newpart.origin = via
                         newpart.via.pop(k)
                         break
-                for k in xrange(len(newpart.via)):
+                for k in range(len(newpart.via)):
                     via = newpart.via[len(newpart.via) - 1 - k]
                     if via.stopid == newpart.destination.stopid and via.get_maybelive_time(
                             'arrival') == newpart.destination.arrival and via.coords == newpart.destination.coords:
@@ -351,7 +380,8 @@ class TripRequest():
                 newpart.via_all = newpart.via
                 newpart.via = []
                 for via in newpart.via_all:
-                    if not via.nostop: newpart.via.append(via)
+                    if not via.nostop:
+                        newpart.via.append(via)
 
                 newpart.duration = int((newpart.destination.arrival - newpart.origin.departure).total_seconds()) / 60
                 if 'turnInst' in partJSON:
@@ -383,7 +413,7 @@ class TripRequest():
         if result.platformname is None:
             result.platformname = jsondata['ref']['platform'].encode('utf8').strip()
         c = self.parseJSONcoords(jsondata['ref']['coords'])
-        if c is not None: result.coords = tools.coords(c[0], c[1])
+        if c is not None: result.coords = coords(c[0], c[1])
 
         if jsondata['dateTime']['time'] != '24:00':
             datetimeObject = datetime.datetime.strptime(
@@ -420,7 +450,7 @@ class TripRequest():
                 tmpname.split(result.number)[0].strip()
 
         if result.destination is None:
-            result.destination = classes.Station()
+            result.destination = Station()
             result.destination.stopid = jsondata['destID']
             result.destination.name = jsondata['destination'].encode('utf8').strip()
         return result
@@ -456,5 +486,5 @@ class TripRequest():
             result.nostop = True
 
         c = self.parseJSONcoords(jsondata['ref']['coords'])
-        if c is not None: result.coords = tools.coords(c[0], c[1])
+        if c is not None: result.coords = coords(c[0], c[1])
         return result

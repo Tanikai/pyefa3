@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 class ObjectInitException(Exception):
     def __init__(self, obj, name):
         self.name = name
@@ -7,7 +5,7 @@ class ObjectInitException(Exception):
         self.value = str(self)
 
     def __str__(self):
-        return 'invalid property %s for %s' % (repr(self.name), self.obj)
+        return f'invalid property {repr(self.name)} for {self.obj}'
 
 
 class SetupException(Exception):
@@ -26,7 +24,7 @@ class SetupException(Exception):
         self.value = str(self)
 
     def __str__(self):
-        return 'invalid argument for %s: expected %s, got %s' % (self.option, self.want, repr(self.have))
+        return f'invalid argument for {self.option}: expected {self.want}, got {repr(self.have)}'
 
 
 class NotImplementedException(Exception):
@@ -41,4 +39,4 @@ class NotImplementedException(Exception):
         self.value = str(self)
 
     def __str__(self):
-        return 'Not Implemented: %s' % (self.what)
+        return f'Not Implemented: {self.what}'

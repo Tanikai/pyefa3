@@ -1,20 +1,28 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-import efa, exceptions
+from .efa import EFA
 
-supported = ('vrr', 'vrn')
+supported = ('vrr', 'vrn', 'ding')
 
 
-class VRR(efa.EFA):
-    efa_triprequest_url = 'http://efa.vrr.de/vrr/XSLT_TRIP_REQUEST2'
+class VRR(EFA):
+    def __init__(self):
+        super().__init__()
+        self.efa_triprequest_url = 'https://efa.vrr.de/vrr/XSLT_TRIP_REQUEST2'
 
 
-class VRN(efa.EFA):
-    efa_triprequest_url = 'http://fahrplanauskunft.vrn.de/vrn/XSLT_TRIP_REQUEST2'
+class VRN(EFA):
+    def __init__(self):
+        super().__init__()
+        self.efa_triprequest_url = 'https://fahrplanauskunft.vrn.de/vrn/XSLT_TRIP_REQUEST2'
 
 
-def network(network):
+class DING(EFA):
+    def __init__(self):
+        super().__init__()
+        self.efa_triprequest_url = 'https://www.ding.eu/ding/XSLT_TRIP_REQUEST2'
+
+
+def network(net):
     global supported
-    if network not in supported:
+    if net not in supported:
         return None
-    return globals()[network.upper()]()
+    return globals()[net.upper()]()

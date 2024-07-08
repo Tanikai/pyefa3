@@ -1,10 +1,10 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 from colorama import Fore, Back, Style
-import tools, exceptions
+
+from .exceptions import SetupException
+from .tools import Table, bold
 
 
-class TripPointCompatible():
+class TripPointCompatible:
     """ Something that can be used as an origin, destination or via point
     Do not use directly! Use EFAStation or EFAAdress instead.
 
@@ -23,7 +23,7 @@ class TripPointCompatible():
 
     def __str__(self):
         return (('%s %s' % (
-        self.place, self.name)) if self.place is not None and self.place.strip() != '' else self.name).replace(
+            self.place, self.name)) if self.place is not None and self.place.strip() != '' else self.name).replace(
             'Hauptbahnhof', 'Hbf').replace('Bahnhof', 'Bf')
 
     @classmethod
@@ -50,7 +50,7 @@ class TripPointCompatible():
             data[2] = 'poi'
 
         if data[2] not in ('poi', 'stop', 'address'):
-            raise exceptions.ObjectSetupException(self, 'ptype', data[2], '(stop|address|point)')
+            raise SetupException('ptype', data[2], '(stop|address|point)')
 
         result = Station() if data[2] == 'stop' else Address() if data[2] == 'address' else POI()
         result.place = data[0]
@@ -58,7 +58,7 @@ class TripPointCompatible():
         return result
 
 
-class TripPointCompatibleUnclear():
+class TripPointCompatibleUnclear:
     """ Something that should be an TripPointCompatible but was rejected
     by EFA for not finding an definitive result.
 
@@ -83,7 +83,7 @@ class TripPointCompatibleUnclear():
         placetbl[0][0] = 'City:'
         nametbl[0][0] = 'Stop:'
 
-        return str(tools.Table(placetbl + nametbl))
+        return str(Table(placetbl + nametbl))
 
 
 class EmptyTripPoint(TripPointCompatible):
@@ -145,7 +145,7 @@ class POI(TripPointCompatible):
         self.ptype = 'poi'
 
 
-class TripResult():
+class TripResult:
     """ Search Results of a TripRequest
 
     settings    -- dict of settings used for the triprequest
@@ -178,19 +178,19 @@ class TripResult():
     def __str__(self):
         if self.unclear:
             result = ''
-            if isinstance(self.origin, TripPointCompatibleUnclear): result += tools.bold('Unclear origin:\n') + str(
+            if isinstance(self.origin, TripPointCompatibleUnclear): result += bold('Unclear origin:\n') + str(
                 self.origin) + '\n'
-            if isinstance(self.destination, TripPointCompatibleUnclear): result += tools.bold(
+            if isinstance(self.destination, TripPointCompatibleUnclear): result += bold(
                 'Unclear destination:\n') + str(self.destination) + '\n'
-            if isinstance(self.via, TripPointCompatibleUnclear): result += tools.bold('Unclear via:\n') + str(
+            if isinstance(self.via, TripPointCompatibleUnclear): result += bold('Unclear via:\n') + str(
                 self.via) + '\n'
         else:
-            via = '' if isinstance(self.via, EmptyTripPoint) else (' via %s' % tools.bold(str(self.via)))
+            via = '' if isinstance(self.via, EmptyTripPoint) else (' via %s' % bold(str(self.via)))
             result = 'Route von %s nach %s%s:\n' % (
-            tools.bold(str(self.origin)), tools.bold(str(self.destination)), via)
+                bold(str(self.origin)), bold(str(self.destination)), via)
             exclude = '' if not len(self.settings['exclude']) else ' – ohne ' + ', '.join(
                 [s.title() for s in self.settings['exclude']])
-            result += '%s %s, %s%s\n\n' % (tools.bold({'arr': 'Ankunft', 'dep': 'Abfahrt'}[self.settings['timetype']]),
+            result += '%s %s, %s%s\n\n' % (bold({'arr': 'Ankunft', 'dep': 'Abfahrt'}[self.settings['timetype']]),
                                            self.time.strftime('%d.%m.%Y %H:%M'),
                                            {'local': 'nur Nahverkehr', 'ic': 'alles außer ICE', 'ice': 'alle Zugtypen'}[
                                                self.settings['train_type']], exclude)
@@ -199,7 +199,7 @@ class TripResult():
         return result
 
 
-class Route():
+class Route:
     """ A route
 
     duration -- route duration in minutes
@@ -228,7 +228,7 @@ class Route():
 
     def __str__(self):
         lines = []
-        lines.append((tools.bold('Abfahrt:') + ' %s – ' + tools.bold('Ankunft:') + ' %s – ' + tools.bold(
+        lines.append((bold('Abfahrt:') + ' %s – ' + bold('Ankunft:') + ' %s – ' + bold(
             'Dauer:') + ' %s Minuten') % (self.parts[0].origin.get_formatted_time('departure'),
                                           self.parts[-1].destination.get_formatted_time('arrival'), self.duration))
         lines.append('-')
@@ -251,12 +251,12 @@ class Route():
             lastpart = part
         lines.append('-')
 
-        result = str(tools.Table(lines))
+        result = str(Table(lines))
         result += '' if not len(self.infotext) else ('\n'.join(self.infotext) + '\n')
         return result
 
 
-class RoutePart():
+class RoutePart:
     """ A part of a route
 
     origin      -- Point describing origin of the route part
@@ -293,11 +293,11 @@ class RoutePart():
         if self.via is None:
             result = [self.origin.getline(False)] + [self.destination.getline(False)]
         else:
-            result = [tools.bold(self.origin.getline(True))] + [via.getline(True) for via in self.via] + [
-                tools.bold(self.destination.getline(True))]
+            result = [bold(self.origin.getline(True))] + [via.getline(True) for via in self.via] + [
+                bold(self.destination.getline(True))]
         result[0][-1] = '%s %s' % (str(self.mot),
                                    str(self.mot.destination) if not self.mot.walk else '%d min. (%dm)' % (
-                                   self.duration, self.distance))
+                                       self.duration, self.distance))
         return result
 
 
@@ -366,7 +366,7 @@ class Point(TripPointCompatible):
         return '%s%s' % (time.strftime('%H:%M'), delay)
 
 
-class Mot():
+class Mot:
     """ mode of transport
 
     walk        -- True if mot is going by foot
@@ -393,8 +393,9 @@ class Mot():
 
     def nicename(self):
         return \
-        ['zug', 's-bahn', 'u-bahn', 'stadtbahn', 'tram', 'stadtbus', 'regionalbus', 'schnellbus', 'seilbahn', 'schiff',
-         'ast', 'sonstige'][self.mottype].title()
+            ['zug', 's-bahn', 'u-bahn', 'stadtbahn', 'tram', 'stadtbus', 'regionalbus', 'schnellbus', 'seilbahn',
+             'schiff',
+             'ast', 'sonstige'][self.mottype].title()
 
     def defline(self):
         if self.abbr is None or self.abbr == '':
@@ -404,8 +405,9 @@ class Mot():
 
     def colorcode(self):
         return \
-        [Back.BLACK, Back.GREEN, Back.BLUE, Back.BLUE, Back.RED, Back.MAGENTA, Back.MAGENTA, Back.MAGENTA, Back.CYAN,
-         Back.CYAN, Back.CYAN, Back.CYAN][self.mottype]
+            [Back.BLACK, Back.GREEN, Back.BLUE, Back.BLUE, Back.RED, Back.MAGENTA, Back.MAGENTA, Back.MAGENTA,
+             Back.CYAN,
+             Back.CYAN, Back.CYAN, Back.CYAN][self.mottype]
 
     def __str__(self):
         if self.mottype is None:
