@@ -22,5 +22,5 @@ setup(name='pyefa3',
           'Intended Audience :: Developers',
           'Programming Language :: Python',
           'License :: OSI Approved :: Apache Software License'],
-      install_requires=['beautifulsoup4', 'colorama'],
+      install_requires=['beautifulsoup4', 'colorama', 'lxml'],
       )
