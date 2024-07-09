@@ -227,7 +227,8 @@ class TripRequest:
             result.name = [elem.getText().strip() for elem in xmldata.itdOdvName('odvNameElem')]
         else:
             odvtype = xmldata['type']
-            if odvtype == 'any': odvtype = xmldata.itdOdvName.odvNameElem['anyType']
+            if odvtype == 'any':
+                odvtype = xmldata.itdOdvName.odvNameElem['anyType']
             if odvtype == 'stop':
                 result = Station()
                 result.place = xmldata.itdOdvPlace.odvPlaceElem.getText().strip()
@@ -245,8 +246,9 @@ class TripRequest:
                 result.name = xmldata.itdOdvName.odvNameElem.getText().strip()
                 result.streetname = xmldata.itdOdvName.odvNameElem['streetName']
                 result.housenumber = xmldata.itdOdvName.odvNameElem['houseNumber']
-                if xmldata.itdOdvName.odvNameElem.has_attr('x'): result.coords = coords(
-                    xmldata.itdOdvName.odvNameElem['x'], xmldata.itdOdvName.odvNameElem['y'])
+                if xmldata.itdOdvName.odvNameElem.has_attr('x'):
+                    result.coords = coords(
+                        xmldata.itdOdvName.odvNameElem['x'], xmldata.itdOdvName.odvNameElem['y'])
             else:
                 raise NotImplementedException('unknown type of odv: "%s"' % xmldata['type'])
         return result

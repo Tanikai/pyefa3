@@ -30,6 +30,7 @@ efa_api = DING()
 result = efa_api.tripRequest(origin_station, destination_station, apitype="xml")
 print(result)
 
+machine_readable = result.asdict()
 ```
 
 ### Install from source

@@ -26,8 +26,11 @@ class TripPointCompatible:
             self.place, self.name)) if self.place is not None and self.place.strip() != '' else self.name).replace(
             'Hauptbahnhof', 'Hbf').replace('Bahnhof', 'Bf')
 
+    def asdict(self):
+        return {'name': self.name, 'place': self.place, 'ptype': self.ptype, 'coords': self.coords}
+
     @classmethod
-    def fromanything(self, data):
+    def fromanything(cls, data):
         """ Creates an TripPointCompatible.
         returns Station or Adress or None if data is invalid
 
@@ -37,11 +40,15 @@ class TripPointCompatible:
                 the first word is used for city and the remaining words
                 for name.
         """
-        if isinstance(data, str): data = data.split(' ', 1)
-        if len(data) not in (2, 3): return None
+        if isinstance(data, str):
+            data = data.split(' ', 1)
+        if len(data) not in (2, 3):
+            return None
 
-        if not isinstance(data, list): return None
-        if len(data) == 2: data.append('stop')
+        if not isinstance(data, list):
+            return None
+        if len(data) == 2:
+            data.append('stop')
         if data[1].startswith('addr:'):
             data[1] = data[1][5:]
             data[2] = 'address'
@@ -69,14 +76,16 @@ class TripPointCompatibleUnclear:
     ptype  -- type of point (stop, address oder poi)
     """
 
-    def __init__(self, **args):
+    def __init__(self):
         self.place = None
         self.name = None
         self.ptype = None
 
     def __str__(self):
-        if type(self.place) != list: self.place = [self.place]
-        if type(self.name) != list: self.name = [self.name]
+        if not isinstance(self.place, list):
+            self.place = [self.place]
+        if not isinstance(self.name, list):
+            self.name = [self.name]
 
         placetbl = [['', p] for p in self.place]
         nametbl = [['', p] for p in self.name]
@@ -106,7 +115,7 @@ class Station(TripPointCompatible):
               if not from api
     """
 
-    def __init__(self, **args):
+    def __init__(self):
         TripPointCompatible.__init__(self)
         self.stopid = None
         self.ptype = 'stop'
@@ -124,11 +133,15 @@ class Address(TripPointCompatible):
               if not from api
     """
 
-    def __init__(self, **args):
+    def __init__(self):
         TripPointCompatible.__init__(self)
         self.streetname = None
         self.housenumber = None
         self.ptype = 'address'
+
+    def asdict(self):
+        return {'name': self.name, 'place': self.place, 'ptype': self.ptype, 'coords': self.coords,
+                'streetname': self.streetname, 'housenumber': self.housenumber}
 
 
 class POI(TripPointCompatible):
@@ -140,7 +153,7 @@ class POI(TripPointCompatible):
               if not from api
     """
 
-    def __init__(self, **args):
+    def __init__(self):
         TripPointCompatible.__init__(self)
         self.ptype = 'poi'
 
@@ -152,7 +165,7 @@ class TripResult:
     origin      -- Point describing the origin
     destination -- Point describing the destination
     via         -- TripPointCompatible describing the via
-    unclear		-- True if waypoints were unclearly requestet and (if
+    unclear		-- True if waypoints were unclearly requested and (if
                    ML-API is used) one or more of origin, destination or
                    via is TripPointCompatibleUnclear. No routes will
                    be available.
@@ -178,25 +191,39 @@ class TripResult:
     def __str__(self):
         if self.unclear:
             result = ''
-            if isinstance(self.origin, TripPointCompatibleUnclear): result += bold('Unclear origin:\n') + str(
-                self.origin) + '\n'
-            if isinstance(self.destination, TripPointCompatibleUnclear): result += bold(
-                'Unclear destination:\n') + str(self.destination) + '\n'
-            if isinstance(self.via, TripPointCompatibleUnclear): result += bold('Unclear via:\n') + str(
-                self.via) + '\n'
+            if isinstance(self.origin, TripPointCompatibleUnclear):
+                result += bold('Unclear origin:\n') + str(self.origin) + '\n'
+            if isinstance(self.destination, TripPointCompatibleUnclear):
+                result += bold('Unclear destination:\n') + str(self.destination) + '\n'
+            if isinstance(self.via, TripPointCompatibleUnclear):
+                result += bold('Unclear via:\n') + str(self.via) + '\n'
         else:
+            origin = bold(str(self.origin))
+            destination = bold(str(self.destination))
             via = '' if isinstance(self.via, EmptyTripPoint) else (' via %s' % bold(str(self.via)))
-            result = 'Route von %s nach %s%s:\n' % (
-                bold(str(self.origin)), bold(str(self.destination)), via)
+            result = f'Route von {origin} nach {destination}{via}:\n'
             exclude = '' if not len(self.settings['exclude']) else ' – ohne ' + ', '.join(
                 [s.title() for s in self.settings['exclude']])
-            result += '%s %s, %s%s\n\n' % (bold({'arr': 'Ankunft', 'dep': 'Abfahrt'}[self.settings['timetype']]),
-                                           self.time.strftime('%d.%m.%Y %H:%M'),
-                                           {'local': 'nur Nahverkehr', 'ic': 'alles außer ICE', 'ice': 'alle Zugtypen'}[
-                                               self.settings['train_type']], exclude)
+
+            departure_type = bold({'arr': 'Ankunft', 'dep': 'Abfahrt'}[self.settings['timetype']])
+            dep_time = self.time.strftime('%d.%m.%Y %H:%M')
+            transportation_types = {'local': 'nur Nahverkehr', 'ic': 'alles außer ICE', 'ice': 'alle Zugtypen'}[
+                self.settings['train_type']]
+
+            result += f'{departure_type} {dep_time}, {transportation_types}{exclude}\n\n'
 
             result += '\n'.join([str(route) for route in self.routes])
         return result
+
+    def asdict(self):
+        return {
+            # 'settings': { },
+            'origin': self.origin.asdict(),
+            'destination': self.destination.asdict(),
+            'via': self.via.asdict(),
+            'unclear': self.unclear,
+            'routes': list(map(lambda r: r.asdict(), self.routes))
+        }
 
 
 class Route:
@@ -208,7 +235,7 @@ class Route:
     parts    -- list of RoutePart describing the parts of the route
     """
 
-    def __init__(self, **args):
+    def __init__(self):
         self.duration = None
         self.ticket_type = None
         self.fare_adult = None
@@ -228,9 +255,11 @@ class Route:
 
     def __str__(self):
         lines = []
-        lines.append((bold('Abfahrt:') + ' %s – ' + bold('Ankunft:') + ' %s – ' + bold(
-            'Dauer:') + ' %s Minuten') % (self.parts[0].origin.get_formatted_time('departure'),
-                                          self.parts[-1].destination.get_formatted_time('arrival'), self.duration))
+        departure_time = self.parts[0].origin.get_formatted_time('departure')
+        arrival_time = self.parts[-1].destination.get_formatted_time('arrival')
+        time_line = f'{bold("Abfahrt:")} {departure_time} - {bold("Ankunft:")} {arrival_time} - {bold("Dauer:")} - {self.duration} Minuten'
+        lines.append(time_line)
+
         lines.append('-')
         lastpart = None
         for part in self.parts:
@@ -255,6 +284,21 @@ class Route:
         result += '' if not len(self.infotext) else ('\n'.join(self.infotext) + '\n')
         return result
 
+    def asdict(self):
+        return {
+            'duration': self.duration,
+            'departure_time': self.parts[0].origin.get_datetime('departure'),  # may need different formatting
+            'departure_delay': self.parts[0].origin.get_delay('departure'),
+            'arrival_time': self.parts[-1].destination.get_datetime('arrival'),
+            'arrival_delay': self.parts[-1].destination.get_delay('arrival'),
+            'ticket_type': self.ticket_type,
+            'fare_adult': self.fare_adult,
+            'fare_child': self.fare_child,
+            'vehicle_time': self.vehicle_time,
+            'infotext': self.infotext,
+            'parts': list(map(lambda p: p.asdict(), self.parts))
+        }
+
 
 class RoutePart:
     """ A part of a route
@@ -276,7 +320,7 @@ class RoutePart:
                    the routepart
     """
 
-    def __init__(self, **args):
+    def __init__(self):
         self.origin = None
         self.destination = None
         self.mot = None
@@ -299,6 +343,18 @@ class RoutePart:
                                    str(self.mot.destination) if not self.mot.walk else '%d min. (%dm)' % (
                                        self.duration, self.distance))
         return result
+
+    def asdict(self):
+        return {
+            'origin': self.origin.asdict(),
+            'destination': self.destination.asdict(),
+            'mot': self.mot.asdict(),
+            'distance': self.distance,
+            'duration': self.duration,
+            'via': list(map(lambda v: v.asdict(), self.via)) if self.via is not None else None,
+            'via_all': list(map(lambda v: v.asdict(), self.via_all)) if self.via_all is not None else None,
+            'coords': self.coords
+        }
 
 
 class Point(TripPointCompatible):
@@ -329,7 +385,7 @@ class Point(TripPointCompatible):
                        real time data
     """
 
-    def __init__(self, **args):
+    def __init__(self):
         TripPointCompatible.__init__(self)
         self.platformname = None
         self.stopid = None
@@ -352,18 +408,33 @@ class Point(TripPointCompatible):
 
     def get_maybelive_time(self, name):
         result = getattr(self, '%s_live' % name)
-        if result is None: result = getattr(self, '%s' % name)
+        if result is None:
+            result = getattr(self, '%s' % name)
         return result
 
     def get_formatted_time(self, name, live=True):
         time = getattr(self, '%s' % name)
-        if time is None: return ''
+        if time is None:
+            return ''
         delay = getattr(self, '%s_delay' % name)
         if live and delay is not None:
             delay = ' %s%s%+d%s' % (Style.BRIGHT, Fore.GREEN if delay <= 0 else Fore.RED, delay, Style.RESET_ALL)
         else:
             delay = ''
         return '%s%s' % (time.strftime('%H:%M'), delay)
+
+    def get_datetime(self, name) -> str:
+        time = getattr(self, '%s' % name)
+        if time is None:
+            return ''
+        return time.strftime('%Y-%m-%d %H:%M')
+
+    def get_delay(self, name, live=True) -> float:
+        delay = getattr(self, '%s_delay' % name)
+        if live and delay is not None:
+            return delay
+        else:
+            return 0.0
 
 
 class Mot:
@@ -382,7 +453,7 @@ class Mot:
                    of the routepart)
     """
 
-    def __init__(self, **args):
+    def __init__(self):
         self.mottype = None
         self.line = None
         self.name = None
@@ -414,3 +485,13 @@ class Mot:
             return Style.BRIGHT + self.name + Style.RESET_ALL
         else:
             return Fore.WHITE + self.colorcode() + Style.BRIGHT + self.line + Style.RESET_ALL
+
+    def asdict(self):
+        return {
+            'mottype': self.mottype,
+            'line': self.line,
+            'name': self.name,
+            'abbr': self.abbr,
+            'number': self.number,
+            'destination': self.destination.asdict()
+        }

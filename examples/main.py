@@ -18,4 +18,7 @@ def get_trip_for_university():
 
 
 if __name__ == "__main__":
-    print(get_trip_for_university())
+    result = get_trip_for_university()
+    print(result)
+    machine_readable = result.asdict()
+    print(machine_readable)
